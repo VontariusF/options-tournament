@@ -1,0 +1,9 @@
+options-tournament
+Copyright 2026 Vontarius Falls
+
+This product includes portions of software originally developed as
+Vibe-Trading by HKUDS contributors (https://github.com/HKUDS/Vibe-Trading),
+licensed under the MIT License. See LICENSE.
+
+Original work in this repository (Alpaca paper options adapter, defined-risk
+mleg path, tournament CLI / executor / API) is Copyright 2026 Vontarius Falls.

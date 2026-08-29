@@ -1,0 +1,32 @@
+# --- secrets: never commit ---
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+**/.secrets/
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+*token*.json
+*secret*.json
+
+# --- python ---
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# --- local artifacts ---
+study_artifacts/
+*.parquet
+.DS_Store
+*.swp

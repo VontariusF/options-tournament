@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "options-tournament"
+version = "0.1.0"
+description = "Alpaca paper options tournament agent — defined-risk structures only"
+requires-python = ">=3.11"
+license = "MIT"
+readme = "README.md"
+authors = [
+    {name = "Vontarius Falls"},
+]
+keywords = ["options", "alpaca", "paper-trading", "tournament"]
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "httpx>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+options-tournament = "options_tournament.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src", "packages/common", "packages/brokers"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "packages/common", "packages/brokers"]
+testpaths = ["tests", "packages/brokers/tests", "packages/common/tests"]
+addopts = "-q"
