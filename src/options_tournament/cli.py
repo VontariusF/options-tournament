@@ -1,4 +1,4 @@
-"""CLI: account, chain, execute, serve, mcp."""
+"""CLI: account, chain, execute, propose, serve, mcp."""
 
 from __future__ import annotations
 
@@ -41,6 +41,21 @@ def cmd_chain(args: argparse.Namespace) -> int:
     )
     print(json.dumps({"ticker": args.ticker.upper(), "n": len(rows), "contracts": rows[:80]}, default=str, indent=2))
     return 0
+
+
+def cmd_propose(args: argparse.Namespace) -> int:
+    from options_tournament.agents import default_ctx, run_specialists
+
+    universe = [s.strip().upper() for s in (args.universe or "").split(",") if s.strip()]
+    book = []
+    if args.book:
+        raw = json.loads(Path(args.book).read_text())
+        book = raw if isinstance(raw, list) else raw.get("cards") or raw.get("book") or []
+    ctx = default_ctx(universe=universe or None, book=book)
+    pairs = run_specialists(ctx, n_target=int(args.n))
+    cards = [c for c, _ in pairs]
+    print(json.dumps({"n": len(cards), "cards": cards}, indent=2))
+    return 0 if cards else 2
 
 
 def cmd_execute(args: argparse.Namespace) -> int:
@@ -87,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
     ch.add_argument("ticker")
     ch.add_argument("--window", type=int, default=45)
 
+    pr = sub.add_parser("propose", help="Featherless specialists propose strategy cards")
+    pr.add_argument("-n", type=int, default=3, help="How many complementary cards")
+    pr.add_argument("--universe", default="", help="Comma-separated tickers")
+    pr.add_argument("--book", default="", help="Optional JSON file of existing cards")
+
     ex = sub.add_parser("execute", help="Plan or submit a strategy card")
     ex.add_argument("card", help="Path to strategy card JSON")
     ex.add_argument("--dry-run", action="store_true", help="Plan only (default unless --arm)")
@@ -106,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_account(args)
     if args.cmd == "chain":
         return cmd_chain(args)
+    if args.cmd == "propose":
+        return cmd_propose(args)
     if args.cmd == "execute":
         return cmd_execute(args)
     if args.cmd == "serve":

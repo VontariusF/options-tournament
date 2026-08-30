@@ -1,4 +1,4 @@
-"""Local FastAPI: health, account, chain, execute."""
+"""Local FastAPI: health, account, chain, propose, execute."""
 
 from __future__ import annotations
 
@@ -53,6 +53,25 @@ def chain(ticker: str) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=str(exc)[:300]) from exc
     return {"ticker": ticker.upper(), "n": len(rows), "contracts": rows[:80]}
+
+
+class ProposeBody(BaseModel):
+    n: int = 3
+    universe: Optional[list[str]] = None
+    book: Optional[list[dict]] = None
+
+
+@app.post("/propose")
+def propose(body: ProposeBody) -> dict[str, Any]:
+    from options_tournament.agents import default_ctx, run_specialists
+
+    try:
+        ctx = default_ctx(universe=body.universe, book=body.book)
+        pairs = run_specialists(ctx, n_target=max(1, min(int(body.n), 8)))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)[:300]) from exc
+    cards = [c for c, _ in pairs]
+    return {"n": len(cards), "cards": cards}
 
 
 @app.post("/execute")

@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "options-tournament"
 version = "0.1.0"
-description = "Alpaca paper options tournament agent — defined-risk structures only"
+description = "Alpaca paper options tournament — Featherless specialists and defined-risk structures"
 requires-python = ">=3.11"
 license = "MIT"
 readme = "README.md"
 authors = [
     {name = "Vontarius Falls"},
 ]
-keywords = ["options", "alpaca", "paper-trading", "tournament"]
+keywords = ["options", "alpaca", "paper-trading", "tournament", "featherless"]
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",

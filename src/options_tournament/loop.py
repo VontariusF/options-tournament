@@ -35,15 +35,42 @@ def _dispatch(name: str, arguments: dict) -> str:
 
 
 def run_loop(prompt: str) -> str:
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-    if not api_key:
-        return "Set OPENAI_API_KEY to use chat. account / chain / execute work without an LLM."
     messages = [
         {"role": "system", "content": "You size defined-risk US equity options. Use tools for chains and pricing. Never invent fills."},
         {"role": "user", "content": prompt},
     ]
+    if os.environ.get("FEATHERLESS_API_KEY", "").strip():
+        from options_tournament.agents import PROPOSER_MODEL
+        from options_tournament.featherless import FeatherlessClient
+
+        client = FeatherlessClient()
+        model = os.environ.get("FEATHERLESS_CHAT_MODEL") or PROPOSER_MODEL
+        for _ in range(6):
+            resp = client.chat(messages, model=model, tools=_openai_tools(), tool_choice="auto")
+            messages.append({
+                "role": "assistant",
+                "content": resp.content or "",
+                "tool_calls": resp.tool_calls,
+            })
+            if not resp.tool_calls:
+                return resp.content or ""
+            for call in resp.tool_calls:
+                fn = call.get("function") or {}
+                raw = fn.get("arguments") or "{}"
+                args = json.loads(raw) if isinstance(raw, str) else (raw or {})
+                result = _dispatch(fn.get("name") or "", args)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call.get("id"),
+                    "content": result,
+                })
+        return "stopped after tool-call budget"
+
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    if not api_key:
+        return "Set FEATHERLESS_API_KEY (or OPENAI_API_KEY) to use chat. account / chain / execute work without an LLM."
     with httpx.Client(timeout=60.0) as client:
         for _ in range(6):
             resp = client.post(

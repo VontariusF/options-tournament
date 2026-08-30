@@ -15,13 +15,14 @@ pip install -e ".[dev]"
 cp .env.example .env
 ```
 
-Fill `.env` with an Alpaca **paper** keypair. Keep `OPTIONS_PAPER_ARMED=0` until you intend to submit.
+Fill `.env` with an Alpaca **paper** keypair. Add `FEATHERLESS_API_KEY` to run the specialist roster. Keep `OPTIONS_PAPER_ARMED=0` until you intend to submit.
 
 ## Commands
 
 ```bash
 options-tournament account
 options-tournament chain AAPL
+options-tournament propose -n 3 --universe AAPL,MSFT,NVDA
 options-tournament execute card.json --dry-run
 options-tournament execute card.json --arm
 options-tournament serve
@@ -50,6 +51,14 @@ Each strategy is a chromosome of seven loci: structure, signed signals, quantile
 New children go through a cheap fitness screen, then out-of-sample gates (deflated Sharpe, Bailey–López de Prado, probability of backtest overfitting, drawdown and trial charge). Only specimens that pass every gate are promoted into the certified pool. Return series with absolute correlation above 0.9 are rejected as near-duplicates.
 
 ![Gene Selection System](docs/gene-selection-system.jpg)
+
+## Featherless agents
+
+A bounded specialist roster on Featherless proposes the cards that compete in the tournament. Hypothesis (OpenMath-Nemotron-32B) picks complementary underlyings and theses. Strategist (DeepSeek-V3) maps each thesis onto structure, delta, and DTE. Proposer (Qwen3-32B) inspects the book with read-only tools and submits typed cards. Critic (DeepSeek-V3) flags near-duplicates and venue violations — flags only, never a risk number.
+
+Python still owns selection, sizing, and max-loss. Models never emit premium or payoff. `propose` prints cards; execute them the same way as a hand-written card.
+
+Set `FEATHERLESS_API_KEY` in `.env`. Chat uses Featherless when that key is present.
 
 ## Safety
 

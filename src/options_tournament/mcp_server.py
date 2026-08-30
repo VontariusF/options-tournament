@@ -34,6 +34,17 @@ TOOLS = [
         "inputSchema": OptionsPricingTool.parameters,
     },
     {
+        "name": "propose_cards",
+        "description": "Featherless specialists propose defined-risk strategy cards.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "n": {"type": "integer"},
+                "universe": {"type": "array", "items": {"type": "string"}},
+            },
+        },
+    },
+    {
         "name": "execute_card",
         "description": "Plan (or submit, if armed) a defined-risk strategy card.",
         "inputSchema": {
@@ -62,6 +73,12 @@ def _call(name: str, arguments: dict[str, Any]) -> str:
         return OptionsChainTool().execute(**arguments)
     if name == "options_pricing":
         return OptionsPricingTool().execute(**arguments)
+    if name == "propose_cards":
+        from options_tournament.agents import default_ctx, run_specialists
+        n = int(arguments.get("n") or 3)
+        ctx = default_ctx(universe=arguments.get("universe"))
+        cards = [c for c, _ in run_specialists(ctx, n_target=max(1, min(n, 8)))]
+        return json.dumps({"n": len(cards), "cards": cards})
     if name == "execute_card":
         card = StrategyCard.from_dict(arguments)
         dry = arguments.get("dry_run", True)
