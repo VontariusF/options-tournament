@@ -43,6 +43,14 @@ options-tournament mcp
 
 `credit_put_spread` also accepts `wing_width` (strike dollars). Selection, sizing, and max-loss stay in Python.
 
+## Gene selection
+
+Each strategy is a chromosome of seven loci: structure, signed signals, quantile, delta, days to expiry, wing width, and a stable ID. Parents combine by one-point crossover; a point mutation can flip a single locus. Feature weights are solved downstream to maximize Sharpe under constraints — they are not encoded as genes.
+
+New children go through a cheap fitness screen, then out-of-sample gates (deflated Sharpe, Bailey–López de Prado, probability of backtest overfitting, drawdown and trial charge). Only specimens that pass every gate are promoted into the certified pool. Return series with absolute correlation above 0.9 are rejected as near-duplicates.
+
+![Gene Selection System](docs/gene-selection-system.jpg)
+
 ## Safety
 
 - The trading client refuses any host that is not `paper-api.alpaca.markets`
