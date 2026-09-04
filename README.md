@@ -64,6 +64,8 @@ Set `FEATHERLESS_API_KEY` in `.env`. Chat uses Featherless when that key is pres
 
 - The trading client refuses any host that is not `paper-api.alpaca.markets`
 - Submits require `OPTIONS_PAPER_ARMED=1` and `--arm`
+- `OPTIONS_STRICT_CREDS=1` refuses a fall-through to `ALPACA_PAPER_*` keys
+- `ALPACA_OPTIONS_EXPECTED_ACCOUNT` (optional) must match before the first order POST
 - A credit spread with an uncovered short leg is refused
 - Keys live in `.env`, which is gitignored
 

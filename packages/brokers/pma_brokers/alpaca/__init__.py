@@ -4,8 +4,8 @@ PAPER ONLY by construction: the client refuses any endpoint that is not the Alpa
 and the broker's order path is fail-closed behind an ArmingGate (DISARMED by default). There is no
 real-capital code path here. Credentials resolve via ``pma_common.secrets`` (env -> Supabase).
 """
-from .client import AlpacaClient, AlpacaError, NotPaperEndpoint
-from .broker import (AlpacaPaperBroker, ArmingGate, OrderRefused, OrderIntent,
+from .client import AlpacaClient, AlpacaError, AccountFingerprintMismatch, NotPaperEndpoint
+from .broker import (AlpacaPaperBroker, ArmingGate, FillsUnavailable, OrderRefused, OrderIntent,
                      strategy_from_client_order_id, assert_defined_risk,
                      TAG_SANITIZE_RE, SQL_SANITIZE_EXPR, sanitize_strategy_tag)
 from .options import (build_occ_symbol, parse_occ_symbol, select_call_contract,
@@ -15,8 +15,8 @@ from .options import (build_occ_symbol, parse_occ_symbol, select_call_contract,
 from .reconcile import reconcile, held_map
 
 __all__ = [
-    "AlpacaClient", "AlpacaError", "NotPaperEndpoint",
-    "AlpacaPaperBroker", "ArmingGate", "OrderRefused", "OrderIntent",
+    "AlpacaClient", "AlpacaError", "AccountFingerprintMismatch", "NotPaperEndpoint",
+    "AlpacaPaperBroker", "ArmingGate", "FillsUnavailable", "OrderRefused", "OrderIntent",
     "strategy_from_client_order_id", "assert_defined_risk",
     "TAG_SANITIZE_RE", "SQL_SANITIZE_EXPR", "sanitize_strategy_tag",
     "build_occ_symbol", "parse_occ_symbol", "select_call_contract",

@@ -8,11 +8,15 @@ Retries with exponential backoff on 429/5xx; a small spacing between requests re
 from __future__ import annotations
 
 import json
+import logging
+import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Optional
+
+logger = logging.getLogger("pma_brokers.alpaca")
 
 PAPER_HOST = "paper-api.alpaca.markets"
 DATA_HOST = "data.alpaca.markets"
@@ -26,32 +30,47 @@ class NotPaperEndpoint(RuntimeError):
     """Raised if the trading endpoint is not the Alpaca paper host — this client is paper-only."""
 
 
-def _is_options_sleeve() -> bool:
-    """True when this process is the OPTIONS sleeve (its own paper account), not the equity book.
+class AccountFingerprintMismatch(RuntimeError):
+    """Raised when ALPACA_OPTIONS_EXPECTED_ACCOUNT is set and the broker account does not match.
 
-    The options sleeve sets ``ALPACA_BROKER_TAG=alpaca_options`` + ``OPTIONS_ONLY=1``; the
-    equity book sets neither. Used to scope credential resolution so the options sleeve resolves
-    its OWN keys and can NEVER fall through to the equity account's ``ALPACA_PAPER_KEY``."""
-    import os
+    Wrong credential resolution must fail before an order is posted, not silently trade another book.
+    """
+
+
+def _is_options_sleeve() -> bool:
+    """True when this process is the options paper account (not a shared equity book).
+
+    The tournament sets ``ALPACA_BROKER_TAG=alpaca_options`` + ``OPTIONS_ONLY=1``. Used to scope
+    credential resolution so options keys never fall through to ``ALPACA_PAPER_KEY`` when the
+    scoped pair is present (and never mix a half-configured pair)."""
     return (os.getenv("ALPACA_BROKER_TAG", "").strip() == "alpaca_options"
             or os.getenv("OPTIONS_ONLY", "").strip() in ("1", "true", "yes", "on"))
 
 
 def _resolve_creds():
-    """(key, secret, endpoint) from pma_common.secrets (env -> Supabase). Endpoint defaults to the
-    paper trading base; never a live host.
+    """(key, secret, endpoint) from pma_common.secrets (env -> optional Supabase). Endpoint
+    defaults to the paper trading base; never a live host.
 
-    SLEEVE SCOPING (2026-08-28): the options sleeve resolves ``ALPACA_OPTIONS_PAPER_KEY/SECRET``
-    FIRST (its own Supabase-stored paper account), falling back to the shared ``ALPACA_PAPER_KEY``
-    only if the options-scoped name is unset. This is the safety fix behind arming: a missing
-    options env can no longer route options orders to the EQUITY account via the Supabase fallback.
-    The equity book is untouched — it never sets the options tag, so it resolves ``ALPACA_PAPER_KEY``
-    exactly as before."""
+    Options keys resolve as an atomic pair. Fallback to shared ``ALPACA_PAPER_KEY/SECRET`` only
+    when BOTH options names are unset and ``OPTIONS_STRICT_CREDS`` is off (and then it is logged).
+    A half-configured pair (key xor secret) fails closed. ``OPTIONS_STRICT_CREDS=1`` removes the
+    fallback entirely.
+    """
+    strict = os.getenv("OPTIONS_STRICT_CREDS", "").strip().lower() in ("1", "true", "yes", "on")
     try:
         from pma_common.secrets import format_secret_miss, get_secret
         if _is_options_sleeve():
-            key = get_secret("ALPACA_OPTIONS_PAPER_KEY", "ALPACA_PAPER_KEY")
-            secret = get_secret("ALPACA_OPTIONS_PAPER_SECRET", "ALPACA_PAPER_SECRET")
+            key = get_secret("ALPACA_OPTIONS_PAPER_KEY")
+            secret = get_secret("ALPACA_OPTIONS_PAPER_SECRET")
+            if not key and not secret and not strict:
+                logger.warning(
+                    "options paper creds falling back to ALPACA_PAPER_KEY/SECRET "
+                    "(ALPACA_OPTIONS_PAPER_* unresolved). That can route orders to a different "
+                    "paper account. Set the options-scoped keys; OPTIONS_STRICT_CREDS=1 removes "
+                    "this fallback."
+                )
+                key = get_secret("ALPACA_PAPER_KEY")
+                secret = get_secret("ALPACA_PAPER_SECRET")
             miss = ("ALPACA_OPTIONS_PAPER_KEY", "ALPACA_OPTIONS_PAPER_SECRET")
         else:
             key = get_secret("ALPACA_PAPER_KEY")
@@ -84,6 +103,34 @@ class AlpacaClient:
         self._max_retries = max_retries
         self._sleep = sleep
         self._last_req = 0.0
+        # Fingerprint is verified lazily before the first order POST, not here: read-only or
+        # offline construction must not pay a blocking GET('account') or die on a transient blip.
+        self._account_verified = False
+
+    def _ensure_account_verified(self) -> None:
+        """Verify the account fingerprint once, before the first order (memoized)."""
+        if self._account_verified:
+            return
+        self._verify_account_fingerprint()
+        self._account_verified = True
+
+    def _verify_account_fingerprint(self) -> None:
+        """When ALPACA_OPTIONS_EXPECTED_ACCOUNT is set, require account_number (or id) to match
+        before any order POST. Unset = skip. Options-sleeve only — a shared equity client must
+        not be judged against the options account number."""
+        if not _is_options_sleeve():
+            return
+        expected = os.getenv("ALPACA_OPTIONS_EXPECTED_ACCOUNT", "").strip()
+        if not expected:
+            logger.debug("account fingerprint check skipped (ALPACA_OPTIONS_EXPECTED_ACCOUNT unset)")
+            return
+        acct = self.get("account") or {}
+        actual = str(acct.get("account_number") or acct.get("id") or "").strip()
+        if actual != expected:
+            raise AccountFingerprintMismatch(
+                f"broker account {actual!r} != expected {expected!r} "
+                "(ALPACA_OPTIONS_EXPECTED_ACCOUNT) — refusing: credentials resolved to the wrong account"
+            )
 
     # ── low level ──────────────────────────────────────────────────────────────
     def _headers(self) -> dict:
@@ -125,6 +172,7 @@ class AlpacaClient:
         return self._request("GET", url)
 
     def post(self, path: str, body: dict) -> Any:
+        self._ensure_account_verified()
         return self._request("POST", f"{self.trading_base}/{path.lstrip('/')}", body)
 
     def get_order_by_client_id(self, client_order_id: str) -> Any:

@@ -8,6 +8,8 @@ Read paths (account/positions/orders) are always allowed. There is no real-capit
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, List, Optional
@@ -17,6 +19,16 @@ from typing import Optional as _Optional
 
 from .client import AlpacaClient
 from .options import parse_occ_symbol, select_call_contract
+
+logger = logging.getLogger("pma_brokers.alpaca")
+
+
+class FillsUnavailable(RuntimeError):
+    """Both Alpaca activity endpoints failed — the fill ledger is unavailable, not empty.
+
+    Raised only under ``BROKER_FILLS_FAIL_LOUD=1`` so reconciliation can freeze instead of
+    concluding there were no fills.
+    """
 
 # Alpaca time-in-force validity by asset class. Crypto rejects 'day'/'opg'/'cls' (422); equities and
 # options accept 'day' (and gtc/ioc/fok). We validate against this so a bad TIF fails locally, loudly.
@@ -212,25 +224,33 @@ class AlpacaPaperBroker:
         return self.client.get("orders", {k: v for k, v in params.items() if v is not None}) or []
 
     def fills(self, limit: int = 500, page_token: Optional[str] = None) -> List[dict]:
-        """Best-effort execution activity rows from Alpaca.
+        """Execution activity rows from Alpaca.
 
         Alpaca's activity surface has appeared under both ``account/activities/FILL``
         and ``account/activities?activity_types=FILL`` shapes. Try the dedicated
-        path first, then the query-param variant. Returns [] on a 404-style shape
-        miss so the caller can degrade cleanly.
+        path first, then the query-param variant.
+
+        An activity-endpoint outage must be distinguishable from an empty fill ledger.
+        With ``BROKER_FILLS_FAIL_LOUD=1``, a double failure raises ``FillsUnavailable``;
+        unset preserves the empty-list return, but swallowed errors are always logged.
         """
         params = {"page_size": limit}
         if page_token:
             params["page_token"] = page_token
         try:
             return self.client.get("account/activities/FILL", params) or []
-        except Exception:
+        except Exception as e1:  # noqa: BLE001 — shape miss or outage; try the query-param variant
             try:
                 fallback = {"activity_types": "FILL", "page_size": limit}
                 if page_token:
                     fallback["page_token"] = page_token
                 return self.client.get("account/activities", fallback) or []
-            except Exception:
+            except Exception as e2:  # noqa: BLE001
+                logger.warning("fills unavailable on both activity endpoints: "
+                               "FILL path -> %s; query variant -> %s", e1, e2)
+                if os.getenv("BROKER_FILLS_FAIL_LOUD", "").strip().lower() in ("1", "true", "yes", "on"):
+                    raise FillsUnavailable(
+                        f"both Alpaca activity endpoints failed: {e1!r}; {e2!r}") from e2
                 return []
 
     def clock(self) -> dict:
